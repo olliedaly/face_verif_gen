@@ -1,7 +1,8 @@
 from pathlib import Path
 
 from hydra import compose, initialize_config_dir
-from yourpkg.train import run
+
+from face_verif_gen.train import run
 
 CONFIGS = str((Path(__file__).parents[1] / "configs").resolve())
 
