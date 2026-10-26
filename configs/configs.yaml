@@ -1,0 +1,13 @@
+defaults:
+  - data: casia
+  - model: iresnet18
+  - head: arcface
+  - train: default
+  - eval: default
+  - _self_
+
+seed: 0
+allow_dirty: false
+wandb:
+  project: unreadable-cluster
+  mode: online   # tests and CI override this to disabled
