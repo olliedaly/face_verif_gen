@@ -1,6 +1,8 @@
+import random
 from pathlib import Path
 
 import hydra
+import pandas as pd
 import pyarrow.parquet as pq
 from huggingface_hub import snapshot_download
 from omegaconf import DictConfig
@@ -31,8 +33,13 @@ def unpack(shard_dir: Path, root: Path) -> None:
     (root / ".complete").touch()  # last, so a crash halfway leaves no marker
 
 
-def split_identities(identities: list[int], n_val, n_test, seed) -> dict[int, str]:
-    """Maps each person to train, val or test."""
+def split_identities(identities: list[int], n_val: int, n_test: int, seed: int) -> dict[int, str]:
+    """Map each person to train, val or test, so no person's photos are in two splits."""
+    # Sorted first because the shuffle depends on input order, and folder listings have none.
+    shuffled = random.Random(seed).sample(sorted(identities), len(identities))
+    test, val = shuffled[:n_test], shuffled[n_test : n_test + n_val]
+    train = shuffled[n_test + n_val :]
+    return dict.fromkeys(test, "test") | dict.fromkeys(val, "val") | dict.fromkeys(train, "train")
 
 
 @hydra.main(version_base="1.3", config_path="../../configs", config_name="config")
@@ -40,8 +47,16 @@ def main(cfg: DictConfig) -> None:
     root = Path(cfg.data.root)
     if (root / ".complete").exists():
         print(f"{root} is already unpacked")
-        return
-    unpack(download(cfg.data.hf_repo, cfg.data.revision), root)
+    else:
+        unpack(download(cfg.data.hf_repo, cfg.data.revision), root)
+
+    identities = [int(p.name) for p in root.iterdir() if p.is_dir()]  # is_dir skips .complete
+    split = split_identities(identities, cfg.data.n_val, cfg.data.n_test, cfg.data.split_seed)
+    split_file = Path(cfg.data.split_file)
+    split_file.parent.mkdir(parents=True, exist_ok=True)
+    rows = sorted(split.items())
+    pd.DataFrame(rows, columns=["identity", "split"]).to_csv(split_file, index=False)
+    print(f"wrote {split_file}")
 
 
 if __name__ == "__main__":
