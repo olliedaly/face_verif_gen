@@ -1,2 +1,9 @@
 name: casia
-manifest: data/placeholder.txt
+hf_repo: SaffalPoosh/casia_web_face
+revision: 08863130fcd1bbdfcbd91442359b80b01d1db741
+root: data/casia   # unpacked PNGs
+manifest: data/placeholder.txt   # the real manifest replaces this in step 4
+split_file: splits/casia.csv
+n_val: 500
+n_test: 1000
+split_seed: 0
