@@ -2,7 +2,7 @@ name: casia
 hf_repo: SaffalPoosh/casia_web_face
 revision: 08863130fcd1bbdfcbd91442359b80b01d1db741
 root: data/casia   # unpacked PNGs
-manifest: data/placeholder.txt   # the real manifest replaces this in step 4
+manifest: data/casia/manifest.parquet   # one row per image, written by prepare_data.py
 split_file: splits/casia.csv
 n_val: 500
 n_test: 1000

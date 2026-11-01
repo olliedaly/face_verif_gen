@@ -7,6 +7,8 @@ import pyarrow.parquet as pq
 from huggingface_hub import snapshot_download
 from omegaconf import DictConfig
 
+from face_verif_gen.run_meta import file_sha256
+
 
 def download(repo: str, revision: str) -> Path:
     """Download the parquet shards at a pinned commit and return the folder holding them."""
@@ -42,6 +44,22 @@ def split_identities(identities: list[int], n_val: int, n_test: int, seed: int) 
     return dict.fromkeys(test, "test") | dict.fromkeys(val, "val") | dict.fromkeys(train, "train")
 
 
+def build_manifest(root: Path, split: dict[int, str]) -> pd.DataFrame:
+    """One row per image: its path under root, its person, their split and the image's sha256."""
+    rows = []
+    for png in sorted(root.glob("*/*.png")):  # sorted so the same images give the same file
+        identity = int(png.parent.name)
+        rows.append(
+            {
+                "path": png.relative_to(root).as_posix(),  # relative, so root can move
+                "identity": identity,
+                "split": split[identity],  # KeyError if a person has no split
+                "sha256": file_sha256(png),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
 @hydra.main(version_base="1.3", config_path="../../configs", config_name="config")
 def main(cfg: DictConfig) -> None:
     root = Path(cfg.data.root)
@@ -57,6 +75,11 @@ def main(cfg: DictConfig) -> None:
     rows = sorted(split.items())
     pd.DataFrame(rows, columns=["identity", "split"]).to_csv(split_file, index=False)
     print(f"wrote {split_file}")
+
+    manifest_file = Path(cfg.data.manifest)
+    manifest = build_manifest(root, split)
+    manifest.to_parquet(manifest_file, index=False)
+    print(f"wrote {manifest_file}: {len(manifest)} images, sha256 {file_sha256(manifest_file)}")
 
 
 if __name__ == "__main__":
