@@ -40,6 +40,10 @@ target-version = "py313"
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]   # errors, pyflakes, import order, bugbear, modern syntax
 
+[tool.ruff.lint.isort]
+# W&B's local run folder, wandb/, otherwise makes ruff sort wandb as one of our own modules.
+known-third-party = ["wandb"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = ["gpu: needs a CUDA GPU (skipped in CI)"]

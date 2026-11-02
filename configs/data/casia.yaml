@@ -3,6 +3,8 @@ hf_repo: SaffalPoosh/casia_web_face
 revision: 08863130fcd1bbdfcbd91442359b80b01d1db741
 root: data/casia   # unpacked PNGs
 manifest: data/casia/manifest.parquet   # one row per image, written by prepare_data.py
+artifact: casia-manifest   # the W&B Artifact prepare_data.py logs the manifest as
+artifact_version: v0   # the version every run links to; prepare_data.py prints it
 split_file: splits/casia.csv
 n_val: 500
 n_test: 1000

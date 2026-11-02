@@ -4,8 +4,9 @@ from pathlib import Path
 import hydra
 import pandas as pd
 import pyarrow.parquet as pq
+import wandb
 from huggingface_hub import snapshot_download
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 
 from face_verif_gen.run_meta import file_sha256
 
@@ -60,6 +61,24 @@ def build_manifest(root: Path, split: dict[int, str]) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def log_manifest(manifest_file: Path, sha256: str, cfg: DictConfig) -> None:
+    """Log the manifest as a W&B Artifact. An unchanged file adds no new version."""
+    with wandb.init(
+        project=cfg.wandb.project,
+        mode=cfg.wandb.mode,
+        job_type="prepare-data",
+        config=OmegaConf.to_container(cfg.data, resolve=True),
+    ) as run:
+        artifact = wandb.Artifact(
+            cfg.data.artifact,
+            type="dataset",
+            metadata={"sha256": sha256, "hf_repo": cfg.data.hf_repo, "revision": cfg.data.revision},
+        )
+        artifact.add_file(str(manifest_file))
+        version = run.log_artifact(artifact).wait().version  # known once the upload finishes
+        print(f"logged {cfg.data.artifact}:{version}; runs use data.artifact_version")
+
+
 @hydra.main(version_base="1.3", config_path="../../configs", config_name="config")
 def main(cfg: DictConfig) -> None:
     root = Path(cfg.data.root)
@@ -79,7 +98,9 @@ def main(cfg: DictConfig) -> None:
     manifest_file = Path(cfg.data.manifest)
     manifest = build_manifest(root, split)
     manifest.to_parquet(manifest_file, index=False)
-    print(f"wrote {manifest_file}: {len(manifest)} images, sha256 {file_sha256(manifest_file)}")
+    sha256 = file_sha256(manifest_file)
+    print(f"wrote {manifest_file}: {len(manifest)} images, sha256 {sha256}")
+    log_manifest(manifest_file, sha256, cfg)
 
 
 if __name__ == "__main__":

@@ -1,4 +1,5 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from hydra import compose, initialize_config_dir
@@ -35,9 +36,25 @@ def test_dirty_tree_is_refused(monkeypatch):
 
 
 def test_dirty_tree_runs_when_allowed(monkeypatch):
-    monkeypatch.setattr(train, "run_metadata", lambda manifest_path: {"git_dirty": True})
+    meta = {"git_dirty": True, "manifest_sha256": "fake"}  # the run now reads the hash too
+    monkeypatch.setattr(train, "run_metadata", lambda manifest_path: meta)
     cfg = load_config(["wandb.mode=disabled", "allow_dirty=true"])
     train.run(cfg)
+
+
+def fake_run(sha256: str):
+    """Stands in for a W&B run whose use_artifact returns an artifact recording this hash."""
+    artifact = SimpleNamespace(metadata={"sha256": sha256})
+    return SimpleNamespace(use_artifact=lambda _: artifact)
+
+
+def test_matching_artifact_is_linked():
+    train.link_manifest(fake_run("abc"), "casia-manifest:v0", sha256="abc")
+
+
+def test_artifact_of_other_data_is_refused():
+    with pytest.raises(SystemExit, match="not the local manifest"):
+        train.link_manifest(fake_run("abc"), "casia-manifest:v0", sha256="def")
 
 
 def test_dummy_run(tmp_path):
