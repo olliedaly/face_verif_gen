@@ -17,6 +17,12 @@ def run(cfg: DictConfig) -> None:
     meta = run_metadata(cfg.data.manifest)
     if meta["git_dirty"] and not cfg.allow_dirty:
         raise SystemExit("Uncommitted changes: commit them or pass allow_dirty=true")
+    found, pinned = meta["manifest_sha256"], cfg.data.manifest_sha256
+    if found != pinned:
+        raise SystemExit(
+            f"{cfg.data.manifest} has sha256 {found[:12]}… but the config pins {pinned[:12]}…: "
+            "rebuild it with prepare_data.py, or update data.manifest_sha256 if the data changed"
+        )
     seed_everything(cfg.seed)
     wb = wandb.init(
         project=cfg.wandb.project,

@@ -1,3 +1,4 @@
+import hashlib
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -36,9 +37,10 @@ def test_dirty_tree_is_refused(monkeypatch):
 
 
 def test_dirty_tree_runs_when_allowed(monkeypatch):
-    meta = {"git_dirty": True, "manifest_sha256": "fake"}  # the run now reads the hash too
-    monkeypatch.setattr(train, "run_metadata", lambda manifest_path: meta)
     cfg = load_config(["wandb.mode=disabled", "allow_dirty=true"])
+    # The pinned hash, so the manifest check passes and only the dirty tree is tested.
+    meta = {"git_dirty": True, "manifest_sha256": cfg.data.manifest_sha256}
+    monkeypatch.setattr(train, "run_metadata", lambda manifest_path: meta)
     train.run(cfg)
 
 
@@ -57,8 +59,27 @@ def test_artifact_of_other_data_is_refused():
         train.link_manifest(fake_run("abc"), "casia-manifest:v0", sha256="def")
 
 
-def test_dummy_run(tmp_path):
+@pytest.fixture
+def fake_manifest(tmp_path):
     manifest = tmp_path / "manifest.parquet"
     manifest.write_bytes(b"fake")
-    cfg = load_config(["wandb.mode=disabled", "allow_dirty=true", f"data.manifest={manifest}"])
+    return manifest
+
+
+def test_wrong_manifest_is_refused(fake_manifest):
+    cfg = load_config(["wandb.mode=disabled", "allow_dirty=true", f"data.manifest={fake_manifest}"])
+    with pytest.raises(SystemExit, match="config pins"):
+        train.run(cfg)
+
+
+def test_dummy_run(fake_manifest):
+    sha256 = hashlib.sha256(b"fake").hexdigest()  # pin the fake file, as a data change would
+    cfg = load_config(
+        [
+            "wandb.mode=disabled",
+            "allow_dirty=true",
+            f"data.manifest={fake_manifest}",
+            f"data.manifest_sha256={sha256}",
+        ]
+    )
     train.run(cfg)
