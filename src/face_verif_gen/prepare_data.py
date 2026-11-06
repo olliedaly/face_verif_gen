@@ -2,12 +2,14 @@ import random
 from pathlib import Path
 
 import hydra
+import numpy as np
 import pandas as pd
 import pyarrow.parquet as pq
 import wandb
 from huggingface_hub import snapshot_download
 from omegaconf import DictConfig, OmegaConf
 
+from face_verif_gen.data import read_image
 from face_verif_gen.run_meta import file_sha256
 
 
@@ -79,6 +81,19 @@ def log_manifest(manifest_file: Path, sha256: str, cfg: DictConfig) -> None:
         print(f"logged {cfg.data.artifact}:{version}; runs use data.artifact_version")
 
 
+def write_array(manifest: pd.DataFrame, root: Path, array_file: Path) -> None:
+    """Decode every image into one uint8 (N, 3, 112, 112) .npy file, row i being manifest row i."""
+    shape = (len(manifest), *read_image(root / manifest["path"].iloc[0]).shape)
+    # Filled under a temporary name, then renamed: the file starts as all zeros, so an
+    # interrupted run would otherwise leave black images in a file that looks finished.
+    partial = array_file.with_name(array_file.name + ".partial")
+    images = np.lib.format.open_memmap(partial, mode="w+", dtype=np.uint8, shape=shape)
+    for i, path in enumerate(manifest["path"]):
+        images[i] = read_image(root / path)
+    images.flush()
+    partial.replace(array_file)
+
+
 @hydra.main(version_base="1.3", config_path="../../configs", config_name="config")
 def main(cfg: DictConfig) -> None:
     root = Path(cfg.data.root)
@@ -101,6 +116,11 @@ def main(cfg: DictConfig) -> None:
     sha256 = file_sha256(manifest_file)
     print(f"wrote {manifest_file}: {len(manifest)} images, sha256 {sha256}")
     log_manifest(manifest_file, sha256, cfg)
+
+    array_file = Path(cfg.data.array)
+    print(f"decoding {len(manifest)} images into {array_file}, which can take 15 minutes")
+    write_array(manifest, root, array_file)
+    print(f"wrote {array_file}: {array_file.stat().st_size / 1e9:.1f} GB")
 
 
 if __name__ == "__main__":

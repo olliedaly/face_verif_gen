@@ -18,3 +18,9 @@ checkpoints/
 
 # Folders deliberately named "data" that hold code or config
 !configs/data/
+
+# Personal backups of Claude Code chats (chats/export_chat.py)
+chats/
+
+# Personal Claude Code settings for this repo (the chat backup hook)
+.claude/settings.local.json

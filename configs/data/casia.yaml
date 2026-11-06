@@ -7,6 +7,7 @@ manifest: data/casia/manifest.parquet   # one row per image, written by prepare_
 manifest_sha256: bf52a9b0609e6cd71843bec59812ac807920ffcb13b67ac629aa9affffd1240a
 artifact: casia-manifest   # the W&B Artifact prepare_data.py logs the manifest as
 artifact_version: v0   # the version every run links to; prepare_data.py prints it
+array: data/casia/images.npy   # every image decoded to uint8, row i being manifest row i
 split_file: splits/casia.csv
 n_val: 500
 n_test: 1000
