@@ -516,7 +516,6 @@ source = { editable = "." }
 dependencies = [
     { name = "huggingface-hub" },
     { name = "hydra-core" },
-    { name = "ipykernel" },
     { name = "matplotlib" },
     { name = "numpy" },
     { name = "pandas" },
@@ -529,6 +528,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "ipykernel" },
     { name = "pre-commit" },
     { name = "pytest" },
     { name = "ruff" },
@@ -538,7 +538,6 @@ dev = [
 requires-dist = [
     { name = "huggingface-hub", specifier = ">=2.3.0" },
     { name = "hydra-core", specifier = ">=1.3.8" },
-    { name = "ipykernel", specifier = ">=7.4.0" },
     { name = "matplotlib", specifier = ">=3.11.2" },
     { name = "numpy", specifier = ">=2.5.4" },
     { name = "pandas", specifier = ">=3.1.0" },
@@ -551,6 +550,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "ipykernel", specifier = ">=7.4.0" },
     { name = "pre-commit", specifier = ">=4.7.0" },
     { name = "pytest", specifier = ">=9.1.1" },
     { name = "ruff", specifier = ">=0.17.2" },
