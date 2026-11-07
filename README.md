@@ -1,6 +1,11 @@
 # face_verif_gen
 ## Face verification trained from scratch, tested for failure modes, and improved with generated data.
 
+## Data
+
+CASIA-WebFace: where it comes from, its licence and its known problems are in the
+[datasheet](docs/casia_datasheet.md).
+
 ## Data loading
 
 Training images per second with no model attached, from `benchmark_loader.py`: 50,000 random
