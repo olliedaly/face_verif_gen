@@ -20,3 +20,8 @@ SATA SSD (LUKS, btrfs).
 Cold runs drop the files from the page cache first. Directory entries stay cached, which flatters
 the PNGs slightly. Reading the array through a memmap instead gave 800 cold and 5,900 warm:
 page faults on random rows made Linux read about 2 MB of the file per 37 KB image.
+
+The warm figures come from a 50,000-image sample (1.9 GB), which fits in RAM. The training split
+decodes to 15.9 GB, more than the page cache keeps with other programs running: read twice, a
+250,000-image sample (9.4 GB) managed 15,600 images/s the second time. Expect training to read
+at about the cold rate.
