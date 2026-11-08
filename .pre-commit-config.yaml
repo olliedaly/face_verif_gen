@@ -19,3 +19,8 @@ repos:
     rev: 0.13.5
     hooks:
       - id: uv-lock                   # keeps uv.lock in step with pyproject
+  - repo: https://github.com/kynan/nbstripout
+    rev: 0.9.1
+    hooks:
+      - id: nbstripout                # notebook outputs can hold face images; the repo is public
+        args: ["--extra-keys", "cell.attachments"]   # images pasted into markdown cells too
