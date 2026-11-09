@@ -40,12 +40,18 @@ class Block(nn.Module):
 
 
 class IResNet(nn.Module):
+    """IResNet-18, laid out as AdaFace's: (B, 3, 112, 112) -> (B, 512) embedding, not normalised."""
+
     def __init__(self):
         super().__init__()
         # keep 112x112 resolution for the input image (stride=1, padding=1)
-        self.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
-        self.bn1 = nn.BatchNorm2d(64)
-        self.prelu = nn.PReLU(64)
+        self.stem(
+            nn.Sequential(
+                nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False),
+                nn.BatchNorm2d(64),
+                nn.PReLU(64),
+            )
+        )
         # 4 stages of 2 blocks; each stage's first block halves H and W: 112 -> 56 -> 28 -> 14 -> 7.
         self.body = nn.Sequential(
             Block(64, 64, stride=2),
@@ -57,6 +63,8 @@ class IResNet(nn.Module):
             Block(256, 512, stride=2),
             Block(512, 512, stride=1),
         )
+        # (B, 512, 7, 7) -> (B, 512). Flatten, not average pooling: the faces are aligned, so
+        # where a feature is says something (the eyes are always in the same cells).
         self.output = nn.Sequential(
             nn.BatchNorm2d(512),
             nn.Dropout(p=0.4),
@@ -65,11 +73,9 @@ class IResNet(nn.Module):
             nn.BatchNorm1d(512, affine=False),
         )
 
-    def forward(self, x):
-        # Define the forward pass
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.prelu(x)
         x = self.body(x)  # runs the 8 blocks in order
-        x = self.output(x)
-        return x
+        return self.output(x)
