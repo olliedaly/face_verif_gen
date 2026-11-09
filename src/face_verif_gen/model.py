@@ -74,8 +74,6 @@ class IResNet(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.conv1(x)
-        x = self.bn1(x)
-        x = self.prelu(x)
+        x = self.stem(x)  # runs the stem
         x = self.body(x)  # runs the 8 blocks in order
         return self.output(x)
