@@ -39,6 +39,13 @@ class Block(nn.Module):
         return out
 
 
+def preprocess(images: torch.Tensor) -> torch.Tensor:
+    """A uint8 RGB batch, values 0 to 255, as float32 in [-1, 1]: the model's declared input."""
+    if images.dtype != torch.uint8:  # double normalisation is silent
+        raise TypeError(f"expected uint8 images, got {images.dtype}: already preprocessed?")
+    return (images.float() / 255 - 0.5) / 0.5
+
+
 class IResNet(nn.Module):
     """IResNet-18, laid out as AdaFace's: (B, 3, 112, 112) -> (B, 512) embedding, not normalised."""
 
