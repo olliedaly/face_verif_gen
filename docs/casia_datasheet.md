@@ -68,3 +68,11 @@ numbers to line up. They are small: 7 of the 68,501 val and test images, and 2 o
 - **Why it matters little here:** the benchmarks are only a sanity check against published
   numbers, which come from models trained on the same CASIA, so any overlap flatters both
   equally. The main results come from CASIA's own test people.
+
+## Released models trained on it
+
+- **AdaFace's IResNet-18** (`adaface_ir18_casia.ckpt`, sha256 `2be3042e2266b745824ba95dad4d09a0e4d9f67bd08fb0b79f5b7a605c48fd30`)
+  was trained on all 10,572 people: its classifier has one row per person. So it has seen this
+  project's val and test people.
+- It is used only to check the model code (T3) and to reproduce its published benchmark scores.
+  Scoring it on CASIA's own val or test people would flatter it, so it is never a baseline there.

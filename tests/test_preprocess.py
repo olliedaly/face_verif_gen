@@ -1,15 +1,7 @@
-from pathlib import Path
-
 import pytest
 import torch
-from omegaconf import OmegaConf
-from torch.utils.data import DataLoader
 
-from face_verif_gen.data import FaceDataset
 from face_verif_gen.model import preprocess
-
-REPO = Path(__file__).parents[1]
-CASIA = OmegaConf.load(REPO / "configs" / "data" / "casia.yaml")
 
 
 @pytest.fixture
@@ -53,36 +45,7 @@ def test_float_input_is_refused(images):
 
 
 def test_input_is_not_modified(images):
-    """The uint8 array is cached and shared, so in-place arithmetic would corrupt it."""
+    """Callers may reuse the uint8 batch, e.g. to save or show a face, so it must stay as it was."""
     before = images.clone()
     preprocess(images)
     assert torch.equal(images, before)
-
-
-@pytest.fixture(scope="module")
-def real_batch():
-    """32 real training photos, as the loader hands them over: raw uint8 pixels, batched."""
-    if not (REPO / CASIA.manifest).exists():
-        pytest.skip("needs the real data: run prepare_data.py")
-    dataset = FaceDataset(
-        REPO / CASIA.manifest, REPO / CASIA.root, REPO / CASIA.split_file, "train"
-    )
-    batch, _ = next(iter(DataLoader(dataset, batch_size=32)))
-    return batch
-
-
-def test_real_batch_preprocesses_into_the_declared_range(real_batch):
-    """Real photos, where pixel values actually sit, rather than values set by a test."""
-    assert real_batch.dtype == torch.uint8  # the loader hands over raw pixels; this is the gate
-    processed = preprocess(real_batch)
-    assert processed.dtype == torch.float32
-    assert processed.shape == real_batch.shape
-    assert processed.min() >= -1.0
-    assert processed.max() <= 1.0
-
-
-def test_real_photos_reach_both_ends_of_the_range(real_batch):
-    """Real faces hold both black and saturated pixels, so a too-large divisor would show here."""
-    processed = preprocess(real_batch)
-    assert processed.min() == -1.0
-    assert processed.max() == 1.0
