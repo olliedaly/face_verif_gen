@@ -45,12 +45,10 @@ class IResNet(nn.Module):
     def __init__(self):
         super().__init__()
         # keep 112x112 resolution for the input image (stride=1, padding=1)
-        self.stem(
-            nn.Sequential(
-                nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False),
-                nn.BatchNorm2d(64),
-                nn.PReLU(64),
-            )
+        self.stem = nn.Sequential(
+            nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False),
+            nn.BatchNorm2d(64),
+            nn.PReLU(64),
         )
         # 4 stages of 2 blocks; each stage's first block halves H and W: 112 -> 56 -> 28 -> 14 -> 7.
         self.body = nn.Sequential(
