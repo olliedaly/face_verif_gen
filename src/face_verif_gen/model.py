@@ -1,3 +1,6 @@
+import re
+from pathlib import Path
+
 import torch
 import torch.nn as nn
 
@@ -82,3 +85,28 @@ class IResNet(nn.Module):
         x = self.stem(x)  # runs the stem
         x = self.body(x)  # runs the 8 blocks in order
         return self.output(x)
+
+
+# AdaFace keeps a block's six layers in one Sequential, res_layer; these are their names here.
+ADAFACE_RES_LAYER = ["bn1", "conv1", "bn2", "prelu", "conv2", "bn3"]
+
+
+def load_adaface(weights_path: str | Path) -> IResNet:
+    """AdaFace's released IResNet-18 (a Lightning checkpoint) in this IResNet, taking RGB input."""
+    checkpoint = torch.load(weights_path, map_location="cpu", weights_only=True)
+    weights = {}
+    for name, tensor in checkpoint["state_dict"].items():
+        if not name.startswith("model."):  # head.*: their classifier, after the embedding
+            continue
+        name = name.removeprefix("model.")  # Lightning stored the network as self.model
+        name = name.replace("input_layer.", "stem.").replace("output_layer.", "output.")
+        name = name.replace("shortcut_layer.", "shortcut.")
+        # body.3.res_layer.4.weight -> body.3.conv2.weight
+        name = re.sub(r"res_layer\.(\d)", lambda m: ADAFACE_RES_LAYER[int(m[1])], name)
+        weights[name] = tensor
+    # Their model takes BGR. A conv sums over its input channels, so reversing the first conv's
+    # input channels gives exactly their outputs for the same image in RGB.
+    weights["stem.0.weight"] = weights["stem.0.weight"][:, [2, 1, 0]]
+    model = IResNet()
+    model.load_state_dict(weights)  # strict: any name left unmapped, or missing, raises
+    return model
