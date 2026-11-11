@@ -1,4 +1,11 @@
-"""T3: AdaFace's released weights in IResNet give the same embeddings as AdaFace's own code."""
+"""T3: AdaFace's released weights in IResNet give the same embeddings as AdaFace's own code.
+
+Why: test_model.py checks shapes, parameter counts and gradients, but many wrong models pass
+those. A stride on the wrong conv, two BatchNorms swapped or a misplaced PReLU change what the
+model computes without changing a single shape. Given the same weights, matching a known-good
+implementation to a cosine of 0.9999 shows every layer computes what it should. load_adaface
+is also how M2 reproduces AdaFace's published scores, so this checks the loader as well.
+"""
 
 from pathlib import Path
 
