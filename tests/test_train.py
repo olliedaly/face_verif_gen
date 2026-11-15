@@ -1,4 +1,6 @@
-"""T6: train_step memorises 32 photos of 4 people, with either head.
+"""T6 and T7: train_step with the real model and both heads.
+
+T6: train_step memorises 32 photos of 4 people, with either head.
 
 Why: every other test checks one piece; this checks they work together. A 24M-parameter model
 memorises 32 photos easily, so a working pipeline drives the loss to about 0 and gets all 32
@@ -9,6 +11,10 @@ error, and all stop that from happening.
 Not caught here: the model cut from the graph, with softmax (a linear head alone can separate
 32 random embeddings; T7 checks every parameter gets a gradient), or labels consistently wrong
 from the data (memorised like right ones; the data tests check those).
+
+T7: after one train_step, every parameter has a gradient that is there, finite and not all zeros,
+and is in the optimiser run() builds. A parameter that fails any of these never learns, and
+nothing errors: the rest of the network learns around it.
 """
 
 from pathlib import Path
@@ -21,17 +27,16 @@ from omegaconf import OmegaConf
 from face_verif_gen.data import FaceDataset
 from face_verif_gen.heads import ArcFaceHead, SoftmaxHead
 from face_verif_gen.model import IResNet, preprocess
-from face_verif_gen.train import train_step
+from face_verif_gen.train import build_optimiser, train_step
 
 REPO = Path(__file__).parents[1]
 CASIA = OmegaConf.load(REPO / "configs" / "data" / "casia.yaml")
+TRAIN = OmegaConf.load(REPO / "configs" / "train" / "default.yaml")
 PEOPLE, PHOTOS = 4, 8  # 8 photos each of 4 people: 32
 
-pytestmark = [
-    pytest.mark.gpu,  # CI runs pytest -m "not gpu"
-    pytest.mark.skipif(not torch.cuda.is_available(), reason="needs a CUDA GPU"),
-    pytest.mark.skipif(not (REPO / CASIA.manifest).exists(), reason="needs the real data"),
-]
+BOTH_HEADS = pytest.mark.parametrize(
+    "make_head", [SoftmaxHead, ArcFaceHead], ids=["softmax", "arcface"]
+)
 
 
 @pytest.fixture(scope="module")
@@ -57,11 +62,14 @@ def batch():
     return images.cuda(), labels.cuda()
 
 
-@pytest.mark.parametrize("make_head", [SoftmaxHead, ArcFaceHead], ids=["softmax", "arcface"])
+@pytest.mark.gpu  # CI runs pytest -m "not gpu"
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="needs a CUDA GPU")
+@pytest.mark.skipif(not (REPO / CASIA.manifest).exists(), reason="needs the real data")
+@BOTH_HEADS
 def test_train_step_memorises_32_photos(batch, make_head):
     images, labels = batch
     torch.manual_seed(0)
-    model = IResNet().cuda()  # the full model: only the head knows how many people there are
+    model = IResNet().cuda()
     head = make_head(IResNet.embedding_dim, PEOPLE).cuda()
     # Fixed here, not read from configs/train, so changing the recipe can't silently break this.
     optimiser = torch.optim.SGD([*model.parameters(), *head.parameters()], lr=0.1, momentum=0.9)
@@ -80,3 +88,40 @@ def test_train_step_memorises_32_photos(batch, make_head):
     with torch.no_grad():
         logits = head(model(preprocess(images)), labels)
     assert (logits.argmax(dim=1) == labels).all(), f"{logits.argmax(dim=1)} != {labels}"
+
+
+def named_params(model, head) -> list[tuple[str, torch.nn.Parameter]]:
+    """Every parameter of both, named like "model.stem.0.weight" and "head.fc.weight"."""
+    params = [(f"model.{name}", p) for name, p in model.named_parameters()]
+    return params + [(f"head.{name}", p) for name, p in head.named_parameters()]
+
+
+@BOTH_HEADS
+def test_every_parameter_gets_a_gradient(make_head):
+    torch.manual_seed(0)
+    # Random pixels on the CPU: needs no data or GPU. BatchNorm1d needs 2+ images in train mode.
+    images = torch.randint(0, 256, (4, 3, 112, 112), dtype=torch.uint8)
+    labels = torch.randint(0, 10, (4,))
+    model = IResNet()
+    head = make_head(IResNet.embedding_dim, 10)
+    train_step(model, head, build_optimiser(model, head, TRAIN), images, labels)
+
+    problems = {}
+    for name, p in named_params(model, head):
+        if p.grad is None:
+            problems[name] = "no gradient: not in the graph"
+        elif not torch.isfinite(p.grad).all():
+            problems[name] = "NaN or inf"
+        elif not p.grad.any():
+            problems[name] = "all zeros"
+    assert not problems, problems
+
+
+@BOTH_HEADS
+def test_optimiser_holds_every_parameter(make_head):
+    model = IResNet()
+    head = make_head(IResNet.embedding_dim, 10)
+    optimiser = build_optimiser(model, head, TRAIN)
+    optimised = {id(p) for group in optimiser.param_groups for p in group["params"]}
+    missing = [name for name, p in named_params(model, head) if id(p) not in optimised]
+    assert not missing, f"not in the optimiser, so never updated: {missing}"

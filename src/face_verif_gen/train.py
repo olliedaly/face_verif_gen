@@ -32,6 +32,16 @@ def check_inputs(cfg: DictConfig) -> dict:
     return meta
 
 
+def build_optimiser(model, head, cfg: DictConfig) -> torch.optim.Optimizer:
+    """SGD over the model's parameters and the head's; cfg is the train config, configs/train."""
+    return torch.optim.SGD(
+        [*model.parameters(), *head.parameters()],  # the head's rows are learned too
+        lr=cfg.lr,
+        momentum=cfg.momentum,
+        weight_decay=cfg.weight_decay,
+    )
+
+
 def train_step(model, head, optimiser, images: torch.Tensor, labels: torch.Tensor) -> float:
     """One optimisation step on a batch of uint8 images, as the loader gives them; the loss."""
     model.train()
@@ -70,12 +80,7 @@ def run(cfg: DictConfig) -> None:
     model = IResNet().to(device)
     head = build_head(cfg.head, embed_dim=model.embedding_dim, num_classes=dataset.num_classes)
     head = head.to(device)
-    optimiser = torch.optim.SGD(
-        [*model.parameters(), *head.parameters()],  # the head's rows are learned too
-        lr=cfg.train.lr,
-        momentum=cfg.train.momentum,
-        weight_decay=cfg.train.weight_decay,
-    )
+    optimiser = build_optimiser(model, head, cfg.train)
 
     step = 0  # counts batches across epochs: W&B keeps one point per step
     for epoch in range(cfg.train.epochs):
