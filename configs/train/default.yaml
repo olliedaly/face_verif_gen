@@ -1,3 +1,7 @@
 epochs: 1
-batch_size: 32
+batch_size: 512
+# AdaFace's settings: SGD with momentum 0.9 and weight decay 1e-4, at lr 0.1 for batches of 512.
 lr: 0.1
+momentum: 0.9
+weight_decay: 1e-4
+num_workers: 4   # processes reading images while the GPU trains

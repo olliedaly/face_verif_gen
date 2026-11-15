@@ -52,6 +52,8 @@ def preprocess(images: torch.Tensor) -> torch.Tensor:
 class IResNet(nn.Module):
     """IResNet-18, laid out as AdaFace's: (B, 3, 112, 112) -> (B, 512) embedding, not normalised."""
 
+    embedding_dim = 512  # what a head built for this model takes
+
     def __init__(self):
         super().__init__()
         # keep 112x112 resolution for the input image (stride=1, padding=1)
@@ -77,8 +79,8 @@ class IResNet(nn.Module):
             nn.BatchNorm2d(512),
             nn.Dropout(p=0.4),
             nn.Flatten(),
-            nn.Linear(512 * 7 * 7, 512),
-            nn.BatchNorm1d(512, affine=False),
+            nn.Linear(512 * 7 * 7, self.embedding_dim),
+            nn.BatchNorm1d(self.embedding_dim, affine=False),
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:

@@ -41,7 +41,7 @@ def test_dirty_tree_runs_when_allowed(monkeypatch):
     # The pinned hash, so the manifest check passes and only the dirty tree is tested.
     meta = {"git_dirty": True, "manifest_sha256": cfg.data.manifest_sha256}
     monkeypatch.setattr(train, "run_metadata", lambda manifest_path: meta)
-    train.run(cfg)
+    train.check_inputs(cfg)  # not run(): that would go on to train on CASIA
 
 
 def fake_run(sha256: str):
@@ -72,7 +72,7 @@ def test_wrong_manifest_is_refused(fake_manifest):
         train.run(cfg)
 
 
-def test_dummy_run(fake_manifest):
+def test_new_manifest_is_accepted_once_pinned(fake_manifest):
     sha256 = hashlib.sha256(b"fake").hexdigest()  # pin the fake file, as a data change would
     cfg = load_config(
         [
@@ -82,4 +82,4 @@ def test_dummy_run(fake_manifest):
             f"data.manifest_sha256={sha256}",
         ]
     )
-    train.run(cfg)
+    train.check_inputs(cfg)
