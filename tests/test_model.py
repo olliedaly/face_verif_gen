@@ -80,3 +80,27 @@ def test_block(in_channels, out_channels, stride, parameters):
     out = block(torch.randn(BATCH, in_channels, 56, 56))
     assert out.shape == (BATCH, out_channels, 56 // stride, 56 // stride)
     assert n_parameters(block) == parameters
+
+
+@pytest.fixture
+def dropout(model):
+    """IResNet's only dropout, before the Linear that makes the embedding (p = 0.4)."""
+    return next(m for m in model.modules() if isinstance(m, torch.nn.Dropout))
+
+
+def test_dropout_keeps_the_mean_in_train_mode(dropout):
+    """T8: in train mode dropout zeroes 40% of values and scales the rest by 1 / 0.6, so the mean
+    is unchanged and the next layer sees inputs of the same size in training and in use."""
+    torch.manual_seed(0)
+    dropout.train()
+    out = dropout(torch.ones(1_000_000))
+    # A million values: the share zeroed has sd 0.0005 and the mean sd 0.0008.
+    assert (out == 0).float().mean().item() == pytest.approx(0.4, abs=0.002)
+    assert out.mean().item() == pytest.approx(1.0, abs=0.005)
+
+
+def test_dropout_does_nothing_in_eval_mode(dropout):
+    """T8: in eval mode dropout passes its input through unchanged."""
+    dropout.eval()
+    x = torch.randn(1000)
+    assert torch.equal(dropout(x), x)
