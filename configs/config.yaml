@@ -8,6 +8,10 @@ defaults:
 
 seed: 0
 allow_dirty: false
+out_dir: outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}   # checkpoint and results; Hydra's log too
+hydra:
+  run:
+    dir: ${out_dir}
 wandb:
   project: unreadable-cluster
   mode: online   # tests and CI override this to disabled

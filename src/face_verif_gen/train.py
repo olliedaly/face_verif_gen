@@ -1,13 +1,20 @@
+from functools import partial
+from pathlib import Path
+
 import hydra
+import numpy as np
 import torch
 import wandb
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader
 
+from face_verif_gen.cluster import ui_tightness
 from face_verif_gen.data import FaceDataset
+from face_verif_gen.fixes import ruiner
 from face_verif_gen.heads import build_head, cross_entropy_loss
 from face_verif_gen.model import IResNet, preprocess
 from face_verif_gen.run_meta import run_metadata, seed_everything
+from face_verif_gen.verify import embed
 
 
 def link_manifest(wb, name: str, sha256: str) -> None:
@@ -69,6 +76,12 @@ def run(cfg: DictConfig) -> None:
     dataset = FaceDataset(
         cfg.data.manifest, cfg.data.root, cfg.data.split_file, split="train", array=cfg.data.array
     )
+    # Emergence: UI tightness after every epoch, on the same val photos every epoch and run.
+    val = FaceDataset(
+        cfg.data.manifest, cfg.data.root, cfg.data.split_file, split="val", array=cfg.data.array
+    )
+    probe = np.random.default_rng(0).choice(len(val), cfg.eval.probe_size, replace=False)
+    probe_labels = torch.as_tensor(val.labels[probe], device=device)
     loader = DataLoader(
         dataset,
         batch_size=cfg.train.batch_size,
@@ -90,6 +103,22 @@ def run(cfg: DictConfig) -> None:
             loss = train_step(model, head, optimiser, images, labels)
             wb.log({"loss": loss, "epoch": epoch}, step=step)
             step += 1
+        model.eval()
+        embed_probe = partial(embed, model, val, probe, device, cfg.eval.batch_size)
+        tightness = ui_tightness(embed_probe(), embed_probe(degrade=ruiner(device)), probe_labels)
+        wb.log({"ui_tightness": tightness, "epoch": epoch}, step=step)
+
+    out = Path(cfg.out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    torch.save(
+        {
+            "model": model.state_dict(),
+            "head": head.state_dict(),
+            "config": OmegaConf.to_container(cfg, resolve=True),
+            "meta": meta,
+        },
+        out / "checkpoint.pt",
+    )
     wb.finish()
 
 

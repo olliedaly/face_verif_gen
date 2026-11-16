@@ -1,1 +1,21 @@
 far_targets: [0.001, 0.0001, 0.00001]
+split: val   # the people scored: val while developing, test once at the end
+weights: null   # a checkpoint.pt written by train.py, or adaface for AdaFace's released model
+adaface_checkpoint: checkpoints/adaface_ir18_casia.ckpt
+per_identity: 20   # photos scored per person, so the few with hundreds don't decide TAR
+face_seed: 0
+batch_size: 256
+num_workers: 4
+n_resamples: 1000   # subject bootstrap: 95% intervals over resamples of people
+# Unsure rule: ruin 1 training photo per person (9,072) to find the "can't tell" direction,
+# and flag the share of val photos closest to it.
+ruined_per_identity: 1
+ruined_seed: 1
+unsure_share: 0.01
+# Cohort normalisation: 2 training photos per person (18,144), each photo's 300 nearest.
+cohort_per_identity: 2
+cohort_seed: 0
+cohort_k: 300
+culprit_pairs: 450   # the top val impostor pairs whose photos culprit overlap compares
+culprit_reference: null   # a file of the DINOv2 ArcFace run's culprit photos, one path a line
+probe_size: 2000   # val photos UI tightness is tracked on after every training epoch
