@@ -89,5 +89,7 @@ numbers to line up. They are small: 7 of the 68,501 val and test images, and 2 o
   unpickler that only allows the three names that rebuild NumPy arrays.
 - **CFP-FP's colour channels:** this copy decodes as RGB (red above green above blue, as in
   CASIA and the other four). AdaFace's published CFP-FP matches its model fed the channels
-  swapped, so its published number was most likely measured on swapped channels
-  (tests/test_benchmarks.py). Our own models are scored on RGB.
+  swapped (tests/test_benchmarks.py). Their code reads all five files the same way, so their
+  copy of `cfp_fp.bin` most likely stores its channels the other way round from this one. Our
+  own models are scored on RGB, and compared with each other on our own runs, not with published
+  numbers.

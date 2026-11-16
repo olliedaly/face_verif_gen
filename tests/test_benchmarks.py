@@ -5,11 +5,12 @@ The reproduction is M2's check that evaluation is right: the same weights and pr
 the same numbers. Measured: CPLFW, CALFW and AgeDB-30 exactly, LFW 0.09 points high (5 of 6,000
 pairs; their copy or JPEG decoder may differ slightly).
 
-CFP-FP is the exception. Read as RGB, like every other file, AdaFace scores 94.80%, 2.2 points
+CFP-FP is the exception. Read as RGB, like every other file, AdaFace scores 94.99%, 2.4 points
 above the published 92.59%; with its colour channels swapped it scores 92.60%, and the other four
 get worse when swapped. The file decodes with red above green above blue, as natural faces do and
-as CASIA and the other four do, so RGB is right for this file. AdaFace's published CFP-FP was
-most likely measured on swapped channels, so it is reproduced here with them swapped.
+as CASIA and the other four do, so RGB is right for this file. AdaFace's convert.py reads all five
+files the same way, so their copy of cfp_fp.bin most likely stores its channels the other way
+round from this one. It is reproduced here with them swapped.
 """
 
 import pickle

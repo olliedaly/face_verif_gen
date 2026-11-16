@@ -98,7 +98,7 @@ def main(cfg: DictConfig) -> None:
     mean = np.mean(list(results.values()))
     print(f"{'average':9s} {mean:.2%}  (published {np.mean(list(ADAFACE_R18_CASIA.values())):.2%})")
     print(
-        "AdaFace's published CFP-FP was measured with its colour channels swapped; see "
+        "AdaFace's published CFP-FP matches its model fed swapped colour channels; see "
         "docs/casia_datasheet.md"
     )
 
