@@ -25,7 +25,7 @@ def run_metadata(manifest_path: str) -> dict:
         "git_dirty": bool(_cmd("git", "status", "--porcelain")),
         "manifest_sha256": file_sha256(manifest_path),
         "python": platform.python_version(),
-        "torch": torch.__version__,
+        "torch": str(torch.__version__),  # a TorchVersion, which torch.load refuses
         "cuda": torch.version.cuda,
     }
     if torch.cuda.is_available():

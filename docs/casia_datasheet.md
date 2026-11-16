@@ -68,3 +68,28 @@ numbers to line up. They are small: 7 of the 68,501 val and test images, and 2 o
 - **Why it matters little here:** the benchmarks are only a sanity check against published
   numbers, which come from models trained on the same CASIA, so any overlap flatters both
   equally. The main results come from CASIA's own test people.
+
+## Released models trained on it
+
+- **AdaFace's IResNet-18** (`adaface_ir18_casia.ckpt`, sha256 `2be3042e2266b745824ba95dad4d09a0e4d9f67bd08fb0b79f5b7a605c48fd30`)
+  was trained on all 10,572 people: its classifier has one row per person. So it has seen this
+  project's val and test people.
+- It is used only to check code: the model (T3), the evaluation (reproducing its published
+  benchmark scores), and the evaluation port against i_use_arc_btw's code on val embeddings
+  (tests/test_regression.py), where only the two codes agreeing counts. Scoring it on CASIA's
+  own val or test people would flatter it, so it is never a baseline there.
+
+## Benchmark files
+
+- **Source:** LFW, CFP-FP, CPLFW, CALFW and AgeDB-30 as InsightFace `.bin` files, from the
+  third-party Hugging Face re-upload `gaunernst/face-recognition-eval`, pinned to commit
+  `9921cccf7bc4b317c3021c0eb9d1330d3d732fc0` in `configs/eval/default.yaml`. They are kept in
+  `data/benchmarks/`, which is gitignored like the rest of `data/`.
+- **Loading:** the files are pickles, which can run code when loaded. They are read with an
+  unpickler that only allows the three names that rebuild NumPy arrays.
+- **CFP-FP's colour channels:** this copy decodes as RGB (red above green above blue, as in
+  CASIA and the other four). AdaFace's published CFP-FP matches its model fed the channels
+  swapped (tests/test_benchmarks.py). Their code reads all five files the same way, so their
+  copy of `cfp_fp.bin` most likely stores its channels the other way round from this one. Our
+  own models are scored on RGB, and compared with each other on our own runs, not with published
+  numbers.
