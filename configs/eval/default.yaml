@@ -19,3 +19,8 @@ cohort_k: 300
 culprit_pairs: 450   # the top val impostor pairs whose photos culprit overlap compares
 culprit_reference: null   # a file of the DINOv2 ArcFace run's culprit photos, one path a line
 probe_size: 2000   # val photos UI tightness is tracked on after every training epoch
+benchmarks:   # LFW and four harder sets, as InsightFace .bin files
+  hf_repo: gaunernst/face-recognition-eval   # a third-party re-upload
+  revision: 9921cccf7bc4b317c3021c0eb9d1330d3d732fc0
+  root: data/benchmarks
+  names: [lfw, cfp_fp, cplfw, calfw, agedb_30]

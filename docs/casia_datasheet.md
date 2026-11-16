@@ -78,3 +78,16 @@ numbers to line up. They are small: 7 of the 68,501 val and test images, and 2 o
   benchmark scores), and the evaluation port against i_use_arc_btw's code on val embeddings
   (tests/test_regression.py), where only the two codes agreeing counts. Scoring it on CASIA's
   own val or test people would flatter it, so it is never a baseline there.
+
+## Benchmark files
+
+- **Source:** LFW, CFP-FP, CPLFW, CALFW and AgeDB-30 as InsightFace `.bin` files, from the
+  third-party Hugging Face re-upload `gaunernst/face-recognition-eval`, pinned to commit
+  `9921cccf7bc4b317c3021c0eb9d1330d3d732fc0` in `configs/eval/default.yaml`. They are kept in
+  `data/benchmarks/`, which is gitignored like the rest of `data/`.
+- **Loading:** the files are pickles, which can run code when loaded. They are read with an
+  unpickler that only allows the three names that rebuild NumPy arrays.
+- **CFP-FP's colour channels:** this copy decodes as RGB (red above green above blue, as in
+  CASIA and the other four). AdaFace's published CFP-FP matches its model fed the channels
+  swapped, so its published number was most likely measured on swapped channels
+  (tests/test_benchmarks.py). Our own models are scored on RGB.
