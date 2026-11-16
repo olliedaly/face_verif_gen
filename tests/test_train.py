@@ -1,4 +1,9 @@
-"""T6 and T7: train_step with the real model and both heads.
+"""T1's dtypes, T6 and T7: train_step with the real model and both heads.
+
+T1: under bf16 autocast the model runs in bf16, and the head, its acos and the loss in float32.
+bf16 keeps about 3 significant digits: it rounds cosines within 3 degrees of 0 to 1, and a sum
+of e^z over 9,072 classes loses most of its small terms. Autocast changes dtypes silently, so a
+head moved inside it, or a missing .float(), would still train, just worse.
 
 T6: train_step memorises 32 photos of 4 people, with either head.
 
@@ -23,7 +28,9 @@ import numpy as np
 import pytest
 import torch
 from omegaconf import OmegaConf
+from torch.overrides import TorchFunctionMode
 
+from face_verif_gen import train
 from face_verif_gen.data import FaceDataset
 from face_verif_gen.heads import ArcFaceHead, SoftmaxHead
 from face_verif_gen.model import IResNet, preprocess
@@ -125,3 +132,48 @@ def test_optimiser_holds_every_parameter(make_head):
     optimised = {id(p) for group in optimiser.param_groups for p in group["params"]}
     missing = [name for name, p in named_params(model, head) if id(p) not in optimised]
     assert not missing, f"not in the optimiser, so never updated: {missing}"
+
+
+class AcosInputs(TorchFunctionMode):
+    """Records the dtype of every tensor torch.acos is called on, inside the head too."""
+
+    def __init__(self):
+        super().__init__()
+        self.dtypes = []
+
+    def __torch_function__(self, func, types, args=(), kwargs=None):
+        if func is torch.acos:
+            self.dtypes.append(args[0].dtype)
+        return func(*args, **(kwargs or {}))
+
+
+def test_dtypes_under_autocast(monkeypatch):
+    torch.manual_seed(0)
+    images = torch.randint(0, 256, (4, 3, 112, 112), dtype=torch.uint8)
+    labels = torch.randint(0, 10, (4,))
+    model = IResNet()
+    head = ArcFaceHead(IResNet.embedding_dim, 10)
+    seen = {}
+    model.register_forward_hook(lambda module, args, out: seen.update(embeddings=out.dtype))
+    head.register_forward_hook(
+        lambda module, args, out: seen.update(head_input=args[0].dtype, logits=out.dtype)
+    )
+
+    def recording_loss(logits, labels):
+        loss = cross_entropy_loss(logits, labels)
+        seen["loss"] = loss.dtype
+        return loss
+
+    cross_entropy_loss = train.cross_entropy_loss
+    monkeypatch.setattr(train, "cross_entropy_loss", recording_loss)
+    with AcosInputs() as acos:
+        train_step(model, head, build_optimiser(model, head, TRAIN), images, labels)
+
+    # bf16 embeddings show autocast is on: without it, the float32 checks would pass trivially.
+    assert seen == {
+        "embeddings": torch.bfloat16,
+        "head_input": torch.float32,
+        "logits": torch.float32,
+        "loss": torch.float32,
+    }
+    assert acos.dtypes == [torch.float32]
