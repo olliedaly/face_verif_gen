@@ -22,6 +22,8 @@ class FaceDataset(Dataset):
 
     Images are decoded from the PNGs, or read from the array prepare_data.py decodes
     them into once, if one is given.
+
+    people: keep only the split's first N people, by identity number, labelled 0 to N - 1.
     """
 
     def __init__(
@@ -31,6 +33,7 @@ class FaceDataset(Dataset):
         split_file: Path,
         split: str,
         array: Path | None = None,
+        people: int | None = None,
     ):
         manifest = pd.read_parquet(manifest_file)
         in_split = (manifest["split"] == split).to_numpy()
@@ -59,6 +62,12 @@ class FaceDataset(Dataset):
             self.image_bytes = images[0].nbytes
 
         identities = sorted(rows["identity"].unique())
+        if people is not None:
+            if not 0 < people <= len(identities):
+                raise ValueError(f"people={people}, but {split} has {len(identities)} people")
+            identities = identities[:people]
+            in_split = in_split & manifest["identity"].isin(identities).to_numpy()
+            rows = manifest[in_split]
         self.num_classes = len(identities)
         label_of = {identity: label for label, identity in enumerate(identities)}
         self.root = Path(root)

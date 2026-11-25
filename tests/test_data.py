@@ -66,6 +66,29 @@ def test_train_labels_have_no_gaps(data):
     assert [train[n][1] for n in range(len(train))] == [0, 0, 1]  # people 10, 10 and 20
 
 
+@pytest.mark.parametrize("from_array", [False, True], ids=["png", "array"])
+def test_people_keeps_the_first_n(data, from_array):
+    train = FaceDataset(
+        data / "manifest.parquet",
+        data / "casia",
+        data / "split.csv",
+        "train",
+        data / "images.npy" if from_array else None,
+        people=1,
+    )
+    assert train.num_classes == 1
+    # Person 10's two photos, files 0 and 1; the array must be read at their rows too.
+    assert [(torch.equal(x, image(n)), y) for n, (x, y) in enumerate(train)] == [(True, 0)] * 2
+
+
+@pytest.mark.parametrize("people", [0, 3])
+def test_people_beyond_the_split_is_refused(data, people):
+    with pytest.raises(ValueError, match="train has 2 people"):
+        FaceDataset(
+            data / "manifest.parquet", data / "casia", data / "split.csv", "train", people=people
+        )
+
+
 def test_person_from_another_split_is_refused(data):
     # A manifest built from a different split, which puts val person 30 in training.
     stale = build_manifest(data / "casia", SPLIT | {30: "train"})

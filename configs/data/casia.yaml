@@ -9,6 +9,7 @@ artifact: casia-manifest   # the W&B Artifact prepare_data.py logs the manifest 
 artifact_version: v0   # the version every run links to; prepare_data.py prints it
 array: data/casia/images.npy   # every image decoded to uint8, row i being manifest row i
 split_file: splits/casia.csv
+people: null   # train on only the first N training people, e.g. 1000 for the M3 labs
 n_val: 500
 n_test: 1000
 split_seed: 0
