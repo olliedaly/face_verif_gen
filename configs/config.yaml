@@ -8,6 +8,7 @@ defaults:
 
 seed: 0
 allow_dirty: false
+resume: false   # carry on from out_dir's checkpoint.pt, where a stopped run left off
 out_dir: outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}   # checkpoint and results; Hydra's log too
 hydra:
   run:

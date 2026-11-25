@@ -1,7 +1,16 @@
-epochs: 1
+# AdaFace's recipe, from their code (github.com/mk-minchul/AdaFace: train_val.py, and
+# scripts/run_ir50_ms1mv2.sh for the schedule, as they publish no CASIA script): SGD with
+# momentum 0.9 at lr 0.1 for 512 photos a step, weight decay 5e-4 on every parameter but
+# BatchNorm's, and the rate cut 10x at epochs 12, 20 and 24 of 26.
+epochs: 26
 batch_size: 512
-# AdaFace's settings: SGD with momentum 0.9 and weight decay 1e-4, at lr 0.1 for batches of 512.
 lr: 0.1
 momentum: 0.9
-weight_decay: 1e-4
+weight_decay: 5e-4   # hard-coded in their train_val.py; their --weight_decay flag (1e-4) is unused
+lr_milestones: [12, 20, 24]   # epochs at which the rate is multiplied by lr_gamma
+lr_gamma: 0.1
+# Not AdaFace's: the rate rises linearly from 1% over the first epoch. ArcFace with m = 0.5
+# collapsed without it in M3's lab (L2 and L4); AdaFace's own head has an adaptive margin.
+warmup_epochs: 1
+flip: true   # mirror a random half of each batch left to right, AdaFace's RandomHorizontalFlip
 num_workers: 4   # processes reading images while the GPU trains
