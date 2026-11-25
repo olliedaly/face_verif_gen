@@ -1,4 +1,5 @@
 import signal
+import time
 from functools import partial
 from pathlib import Path
 
@@ -11,13 +12,14 @@ from torch import nn
 from torch.optim.lr_scheduler import LambdaLR
 from torch.utils.data import DataLoader, Sampler
 
+from face_verif_gen import metrics
 from face_verif_gen.cluster import ui_tightness
 from face_verif_gen.data import FaceDataset
 from face_verif_gen.fixes import ruiner
 from face_verif_gen.heads import build_head, cross_entropy_loss
 from face_verif_gen.model import IResNet, preprocess
 from face_verif_gen.run_meta import run_metadata, seed_everything
-from face_verif_gen.verify import embed
+from face_verif_gen.verify import bin_edges, embed, pair_histograms, pick_faces
 
 
 def link_manifest(wb, name: str, sha256: str) -> None:
@@ -152,6 +154,41 @@ def check_resumable(saved_config: dict, cfg: DictConfig) -> None:
         raise SystemExit(f"Can't resume: {', '.join(changed)} differ from the checkpoint's config")
 
 
+def epoch_scores(model, val: FaceDataset, faces, probe, device, cfg: DictConfig) -> dict:
+    """Scores after an epoch, on val people the model never trains on; puts it in eval mode.
+
+    TAR at each FAR on val's faces, up to eval.per_identity photos a person as evaluate.py
+    picks them; and UI tightness on the probe photos, the emergence metric.
+    """
+    model.eval()
+    ev = cfg.eval
+    labels = torch.as_tensor(val.labels[faces], device=device)
+    emb = embed(model, val, faces, device, ev.batch_size, ev.num_workers)
+    genuine, impostor = pair_histograms(emb, labels)
+    edges = bin_edges()
+    scores = {
+        f"val/TAR at FAR {far:g}": metrics.tar_at_far(edges, edges, far, genuine, impostor)[0]
+        for far in ev.far_targets
+    }
+    embed_probe = partial(embed, model, val, probe, device, ev.batch_size)
+    probe_labels = torch.as_tensor(val.labels[probe], device=device)
+    scores["val/UI tightness"] = ui_tightness(
+        embed_probe(), embed_probe(degrade=ruiner(device)), probe_labels
+    )
+    return scores
+
+
+def log_checkpoint(wb, path: Path, epochs_done: int) -> None:
+    """The checkpoint as a version of the run's model Artifact, linked to the run that made it,
+    and through it to the config and the data. W&B copies the file at once, so the next epoch can
+    overwrite it while this one uploads."""
+    if wb.disabled:  # tests: no copy of a 200 MB file each epoch
+        return
+    artifact = wandb.Artifact(f"checkpoint-{wb.id}", type="model", metadata={"epochs": epochs_done})
+    artifact.add_file(str(path))
+    wb.log_artifact(artifact, aliases=[f"epoch-{epochs_done}", "latest"])
+
+
 def save_checkpoint(path: Path, run_state: dict) -> None:
     """Written to a temporary file and renamed, so a kill mid-write leaves the last one whole."""
     temporary = path.with_suffix(".tmp")
@@ -190,12 +227,12 @@ def run(cfg: DictConfig) -> None:
         array=cfg.data.array,
         people=cfg.data.people,
     )
-    # Emergence: UI tightness after every epoch, on the same val photos every epoch and run.
+    # Scored after every epoch, on the same val photos every epoch and run.
     val = FaceDataset(
         cfg.data.manifest, cfg.data.root, cfg.data.split_file, split="val", array=cfg.data.array
     )
+    faces = pick_faces(val.labels, cfg.eval.per_identity, cfg.eval.face_seed)
     probe = np.random.default_rng(0).choice(len(val), cfg.eval.probe_size, replace=False)
-    probe_labels = torch.as_tensor(val.labels[probe], device=device)
     sampler = EpochSampler(len(dataset), cfg.seed)
     loader = DataLoader(
         dataset,
@@ -254,6 +291,9 @@ def run(cfg: DictConfig) -> None:
     with StopRequest() as stop:
         while epoch < cfg.train.epochs and not stop.requested:
             sampler.set_epoch(epoch, start=batch * cfg.train.batch_size)
+            if device.type == "cuda":
+                torch.cuda.reset_peak_memory_stats(device)
+            started, losses = time.perf_counter(), []
             for images, labels in loader:
                 step = epoch * steps_per_epoch + batch  # W&B keeps one point per step
                 # Still uint8, a quarter of float32's bytes to copy; train_step preprocesses on
@@ -265,19 +305,36 @@ def run(cfg: DictConfig) -> None:
                 loss = train_step(model, head, optimiser, images, labels)
                 scheduler.step()
                 wb.log({"loss": loss, "lr": lr, "epoch": epoch}, step=step)
+                losses.append(loss)
                 batch += 1
                 if stop.requested:  # Ctrl+C has also ended the loader's workers: no next batch
                     break
             if stop.requested:
                 break
-            model.eval()
-            embed_probe = partial(embed, model, val, probe, device, cfg.eval.batch_size)
-            tightness = ui_tightness(
-                embed_probe(), embed_probe(degrade=ruiner(device)), probe_labels
+            # train_step's loss.item() waits for the GPU each step, so the clock is not ahead.
+            seconds = time.perf_counter() - started
+            logs = {
+                "epoch": epoch,
+                "speed/photos per second": len(losses) * cfg.train.batch_size / seconds,
+                "speed/minutes training": seconds / 60,
+            }
+            if device.type == "cuda":
+                logs["speed/peak GPU memory GB"] = torch.cuda.max_memory_allocated(device) / 1e9
+            started = time.perf_counter()
+            logs |= epoch_scores(model, val, faces, probe, device, cfg)
+            logs["speed/minutes scoring"] = (time.perf_counter() - started) / 60
+            wb.log(logs, step=(epoch + 1) * steps_per_epoch)
+            tars = ", ".join(
+                f"{far:g}: {logs[f'val/TAR at FAR {far:g}']:.3f}" for far in cfg.eval.far_targets
             )
-            wb.log({"ui_tightness": tightness, "epoch": epoch}, step=(epoch + 1) * steps_per_epoch)
+            print(
+                f"epoch {epoch + 1}/{cfg.train.epochs}: loss {np.mean(losses):.2f}; "
+                f"val TAR at FAR {tars}; {logs['speed/photos per second']:,.0f} photos/s, "
+                f"{seconds / 60:.1f} min"
+            )
             epoch, batch = epoch + 1, 0
             save()
+            log_checkpoint(wb, checkpoint, epochs_done=epoch)
         if stop.requested:
             save()
             print(f"Stopped at epoch {epoch}, batch {batch}: resume with out_dir={out} resume=true")

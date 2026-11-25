@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import torch
+import wandb
 from hydra import compose, initialize_config_dir
 from omegaconf import OmegaConf
 from PIL import Image
@@ -219,3 +220,59 @@ def test_resume_with_other_settings_is_refused(tiny_casia, cpu_only):
     train.run(tiny_run(tiny_casia, run_dir, "train.epochs=1"))
     with pytest.raises(SystemExit, match="train differ"):
         train.run(tiny_run(tiny_casia, run_dir, "train.epochs=1", "train.lr=0.05", "resume=true"))
+
+
+class FakeArtifact:
+    """Stands in for wandb.Artifact, keeping what was added."""
+
+    def __init__(self, name, type, metadata):
+        self.name, self.type, self.metadata, self.files = name, type, metadata, []
+
+    def add_file(self, path):
+        self.files.append(path)
+
+
+class FakeRun:
+    """Stands in for a W&B run, keeping what was logged."""
+
+    id = "fake"
+    disabled = False
+
+    def __init__(self):
+        self.logs, self.artifacts = [], []
+
+    def log(self, data, step):
+        self.logs.append((step, data))
+
+    def log_artifact(self, artifact, aliases):
+        self.artifacts.append((artifact, aliases))
+
+    def use_artifact(self, name):
+        return None  # as when W&B is disabled: link_manifest skips its check
+
+    def finish(self):
+        pass
+
+
+def test_each_epoch_is_scored_and_its_checkpoint_logged(tiny_casia, cpu_only, monkeypatch):
+    wb = FakeRun()
+    monkeypatch.setattr(wandb, "init", lambda **kwargs: wb)
+    monkeypatch.setattr(wandb, "Artifact", FakeArtifact)
+    run_dir = tiny_casia / "run"
+    cfg = tiny_run(tiny_casia, run_dir, "train.epochs=2")
+    train.run(cfg)
+
+    steps = [step for step, _ in wb.logs]
+    assert steps == sorted(steps)  # W&B drops anything logged at an earlier step than the last
+    scored = [data for _, data in wb.logs if "val/UI tightness" in data]
+    assert [data["epoch"] for data in scored] == [0, 1]
+    for data in scored:
+        for far in cfg.eval.far_targets:
+            assert 0 <= data[f"val/TAR at FAR {far:g}"] <= 1
+        assert data["speed/photos per second"] > 0
+    logged = [(a.type, a.files, a.metadata, aliases) for a, aliases in wb.artifacts]
+    checkpoint = [str(run_dir / "checkpoint.pt")]
+    assert logged == [
+        ("model", checkpoint, {"epochs": 1}, ["epoch-1", "latest"]),
+        ("model", checkpoint, {"epochs": 2}, ["epoch-2", "latest"]),
+    ]
