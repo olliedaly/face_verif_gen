@@ -74,7 +74,12 @@ def run(cfg: DictConfig) -> None:
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     dataset = FaceDataset(
-        cfg.data.manifest, cfg.data.root, cfg.data.split_file, split="train", array=cfg.data.array
+        cfg.data.manifest,
+        cfg.data.root,
+        cfg.data.split_file,
+        split="train",
+        array=cfg.data.array,
+        people=cfg.data.people,
     )
     # Emergence: UI tightness after every epoch, on the same val photos every epoch and run.
     val = FaceDataset(
