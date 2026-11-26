@@ -177,3 +177,56 @@ def test_dtypes_under_autocast(monkeypatch):
         "loss": torch.float32,
     }
     assert acos.dtypes == [torch.float32]
+
+
+def test_weight_decay_skips_only_batchnorm():
+    """AdaFace's recipe: decay on every parameter, the head's rows included, but BatchNorm's."""
+    model = IResNet()
+    head = ArcFaceHead(IResNet.embedding_dim, 10)
+    decay = {
+        id(p): group["weight_decay"]
+        for group in build_optimiser(model, head, TRAIN).param_groups
+        for p in group["params"]
+    }
+    norms = (torch.nn.BatchNorm1d, torch.nn.BatchNorm2d)
+    in_norms = {id(p) for m in model.modules() if isinstance(m, norms) for p in m.parameters()}
+    wrong = [
+        name
+        for name, p in named_params(model, head)
+        if decay[id(p)] != (0.0 if id(p) in in_norms else TRAIN.weight_decay)
+    ]
+    assert in_norms, "no BatchNorm parameters found: the check would pass trivially"
+    assert not wrong, wrong
+
+
+def test_schedule_rate_at_each_step():
+    """Warmup ends and each cut lands on the right step, checked before any real run."""
+    steps_per_epoch = 10
+    optimiser = torch.optim.SGD([torch.nn.Parameter(torch.zeros(1))], lr=TRAIN.lr)
+    scheduler = train.build_schedule(optimiser, TRAIN, steps_per_epoch)
+    rates = []
+    for _ in range(TRAIN.epochs * steps_per_epoch):
+        rates.append(scheduler.get_last_lr()[0])
+        optimiser.step()
+        scheduler.step()
+
+    lr = TRAIN.lr
+    assert rates[0] == pytest.approx(0.01 * lr)  # warmup starts at 1%
+    assert rates[9] == pytest.approx((0.01 + 0.99 * 0.9) * lr)  # warmup's last step
+    assert rates[10] == pytest.approx(lr)  # epoch 1: the full rate
+    assert rates[119] == pytest.approx(lr)  # epoch 11, the last before the first cut
+    assert rates[120] == pytest.approx(0.1 * lr)  # epoch 12
+    assert rates[200] == pytest.approx(0.01 * lr)  # epoch 20
+    assert rates[240] == pytest.approx(0.001 * lr)  # epoch 24
+    assert rates[-1] == pytest.approx(0.001 * lr)  # epoch 25, the last
+
+
+def test_random_flip_mirrors_about_half():
+    torch.manual_seed(0)
+    images = torch.randint(0, 256, (1000, 3, 4, 4), dtype=torch.uint8)
+    out = train.random_flip(images)
+    same = (out == images).flatten(1).all(1)
+    mirrored = (out == images.flip(-1)).flatten(1).all(1)
+    assert (same | mirrored).all()  # each photo whole, either as it was or mirrored
+    assert not (same & mirrored).any()  # random pixels: no photo is its own mirror
+    assert 400 < mirrored.sum() < 600
